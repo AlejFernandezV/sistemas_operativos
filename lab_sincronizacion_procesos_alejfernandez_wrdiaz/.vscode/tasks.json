@@ -1,0 +1,49 @@
+{
+    "tasks": [
+        {
+            "type": "cppbuild",
+            "label": "C/C++: gcc compilar archivo productor_consumidor",
+            "command": "gcc",
+            "args": [
+                "-g",
+                "productor_consumidor.c",
+                "-o",
+                "${workspaceFolder}/productor_consumidor.exe"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "problemMatcher": [
+                "$gcc"
+            ],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "detail": "Tarea generada por el depurador."
+        },
+        {
+            "type": "cppbuild",
+            "label": "C/C++: gcc compilar archivo filosofos",
+            "command": "gcc",
+            "args": [
+                "-g",
+                "filosofos.c",
+                "-o",
+                "${workspaceFolder}/filosofos.exe"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "problemMatcher": [
+                "$gcc"
+            ],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "detail": "Tarea generada por el depurador."
+        }
+    ],
+    "version": "2.0.0"
+}

@@ -1,0 +1,19 @@
+Editor VI:
+	- i: insertar antes
+	- I: Insertar al inicio
+	- a: insertar despues
+	- A: insertar al final
+	- b: Se mueve una palabra antes
+	- w: Se mueve una palabra despues
+	- ESC + :q -> salir
+	- ESC + :q! -> salir sin guardar
+	- ESC + :wq -> Guardar y salir 
+	- ESC + u -> Deshacer
+	- CTRL + r -> rehacer
+	- ESC + :sp ó ESC + :vsp -> Sirve para dividir la pantalla
+	- CTRL + w  + (h,j,k,l): Para moverse entre las divisiones de las pantallas
+	- CTRL + w + SHIFT + (h,j,k,l): Para mover las divisiones de las pantallas en direcciones
+	- ESC + :buffers -> Nos muestra que Buffers están activos
+	- ESC + :b'numerobufer' -> Nos mueve al buffer con su respectivo número
+	- ESC + :help -> para tener la ayuda para manejar el vi
+	- SHIFT + g: Ir al final del archivo

@@ -1,0 +1,24 @@
+#simulacion con una sola cola FIFO, q=5
+define queues 1
+define scheduling 1 FIFO
+define quantum 1 2
+
+process A 8 11 1
+process B 12 5 1
+process C 9 2 1
+process D 7 1 1
+process E 15 8 1
+process F 9 9 1
+process G 50 3 1
+
+start
+
+process A 8 11 1
+process B 12 5 1
+process C 2 2 1 
+process D 0 1 1
+process E 0 8 1
+process F 9 9 1
+process G 7 3 1
+
+
