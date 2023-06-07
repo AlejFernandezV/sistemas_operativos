@@ -20,8 +20,6 @@ Date: FECHA_ACTUAL
 
 Seguido de dos caracteres de fin de línea, y seguido se enviará el contenido del archivo.
 
-
-
 Cuando un archivo no se encuentra, el servidor deberá construir y enviar el siguiente mensaje:
 
 HTTP/1.1 404 Not Found

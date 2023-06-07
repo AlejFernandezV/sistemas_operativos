@@ -1,136 +1,367 @@
-
-/**
-* @file
-* @brief Servidor HTTP
-* @author Erwin Meza Vega <emezav@unicauca.edu.co>
-*/
-
-#include <arpa/inet.h>
-#include <netinet/ip.h>
+#include <arpa/inet.h> //inet_aton, inet_ntoa, ...
+#include <fcntl.h>
+#include <limits.h>
+#include <libgen.h>
+#include <netinet/in.h> //IPv4
+#include <pthread.h> //Hilos
+#include <semaphore.h> //Semaforos
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
 #include <sys/types.h>
-#include <sys/socket.h>
 #include <unistd.h>
+#include "protocol.h"
+#include "split.h"
 
-#include "util.h"
+#define MAX_CLIENTES 256
+typedef sem_t semaphore;
+semaphore mutex;
+int finished;
+int clients[MAX_CLIENTES];
 
 /**
-* @brief Manejador de señales.
-* @param num Numero de la señal recibida
-* @note El manejador debe ser instalado mediante sigaction(2).
-*/
-void signal_handler(int num);
+ * @brief decrementa el valor del semaforo
+ * @param s apuntador a un semaforo
+ */
+void down(semaphore * s);
+/**
+ * @brief incrementa el valor del semaforo 
+ * @param s apuntador a un semaforo
+ */
+void up(semaphore * s);
 
-/** @brief Controla la ejecucion del servidor */
-int finished = 0;
 
-int main(int argc, char * argv[]) {
+int recibirArchivo(int client_sd,file_info infoF);
+/**
+ * @brief envia el archivo solicitado por el cliente
+ * @param client_sd 
+ * @param infoF instancia de la estructura file_info
+ */
+int transferirArchivo(int client_sd,file_info infoF);
 
-	//Socket del servidor
-	int s;
+/**
+ * @brief envia la informacion del archivo solicitado por el cliente
+ * @param client_sd 
+ * @param fn nombre del archivo
+ * @param s objeto para acceder al estado del archivo
+ */
+int enviarInfoArchivo(int client_sd,char* fn,struct stat s);
 
-	//Conexion del cliente
-	int c;
+/**
+ * @brief proceso que se realiza cada vez que se conecta un nuevo cliente
+ * @param client_sd apuntador al socket
+ */
+void * atender_cliente(void * client_sd);
 
-	//Direccion IPv4 del servidor
-	struct sockaddr_in addr;
+/**
+ * @brief termina la ejecucion del programa al recibir la señal 
+ * @param signal señal recibida
+ */
+void handle_sigterm(int signal);
 
-	//Estructura de accion de señal
-	struct sigaction act;
+/**
+ * @brief agrega el indice relacionado con el cliente que se esta conectando a un arreglo
+ * para poder gestionar los clientes conectados
+ * @param c entero asociado al cliente que se encuentra conectado
+ */
+int agregar_cliente(int c);
 
-	//Buffer de lectura
-	char buf[BUFSIZ];
-	ssize_t nread;
-	ssize_t nwritten;
+/**
+ * @brief programa principal
+ * @param argc cantidad de argumentos que se ingresan por linea de comandos
+ * @param argv argumentos 
+ */
+int main(int argc,char *argv[])
+{
+   struct sigaction act; 
+   struct sigaction oldact; 
+   struct stat st = {0};   
+   int sd; //socket servidor
+   int client_sd; //socket cliente
 
-	//Inicializar la estructura con ceros (NULL)
-	memset(&act, 0, sizeof(struct sigaction));
-
-	//Establecer el manejador de la señal
-	act.sa_handler = signal_handler;
+   //Direccion del servidor(IPv4)
+   struct sockaddr_in addr;
+   unsigned short port; //puerto es un entero sin signo
+   char buf[1024];
+   char* path;
+   file_info infoF;
+   request req;
+   int leido;
+   int leido2;
+   finished=0;
+   /*Manejador de señales*/
+    memset(&act, 0, sizeof(struct sigaction));
+    memset(&oldact, 0, sizeof(struct sigaction));
+    /*Cuando se reciba  SIGTERM se ejecutará handle_sigterm*/
+    act.sa_handler = handle_sigterm;
+    /*Instalamos el manejador para SIGTERM*/
+    sigaction(SIGTERM, &act, &oldact);
+    /*Instalamos el manejador para SIGINT*/
+    sigaction(SIGINT, &act, &oldact);
 	
-	//Instalar el manejador de la señal SIGINT
-	sigaction(SIGINT, &act, NULL);
+	//Crear carpeta files
+   if (stat("files", &st) == -1){
+		//se crea el directorio files con permisos
+		mkdir("files", 0755);  
+	}
+	if (argc != 2) {
+    	fprintf(stderr, "Debe especificar el puerto a escuchar\n");
+    	exit(EXIT_FAILURE);
+ 	}
 
-	//Instalar el manejador de la señal SIGTERM
-	sigaction(SIGTERM, &act, NULL);
+  	/* 1.Creando el socket con el servidor */
+	//Socket IPv4, de tipo flujo(stream)
+  	sd = socket(AF_INET, SOCK_STREAM, 0);
 
-	//1. Crear un socket IPv4, flujo (stream)
-	s = socket(AF_INET, SOCK_STREAM, 0);
+	if(sd<0){
+		perror("sockect");
+		exit(EXIT_FAILURE); //si no se puede crear el socket
+	}
 
-	if (s < 0) {
-		perror("Socket");
-		exit(EXIT_FAILURE);
-		}
-
-
-	//Inicializar la direccion antes de asociarla
+	//Preparar la direccion para asociarla al socket
+	//formato de la direccion IPv4
 	memset(&addr, 0, sizeof(struct sockaddr_in));
 	addr.sin_family = AF_INET;
-	addr.sin_port = htons(1234); //TODO argumento de linea de comandos!!!
-	if (inet_aton("0.0.0.0", &addr.sin_addr) != 1) { //Escuchar en la direccion 	ip QUE SE ME HAYA ASIGNADO
-		fprintf(stderr, "Unable to parse the address\n");
-		exit(EXIT_FAILURE);
+	
+	port = atoi(argv[1]);
+	addr.sin_port = htons(port);
+	addr.sin_addr.s_addr = INADDR_ANY; //0.0.0.0, cualquier direccion activa
+	
+	//2. Asociar el socket a una direccion (IPv4)
+	printf("Asociando el socket..\n");
+	bind(sd, (struct sockaddr *)&addr, sizeof(struct sockaddr_in));
+
+  	/* Escuchando el socket abierto */
+  	listen(sd, 10);
+
+	struct sockaddr_in client_addr;
+	memset(&client_addr, 0, sizeof(struct sockaddr_in));
+	socklen_t client_addr_len;
+	client_addr_len = sizeof(struct sockaddr_in); //Tamaño esperado de la direccion
+
+  	printf("Servidor escuchando en el puerto %s\n", argv[1]);
+
+  	/*Inicializar el mutex*/
+  	sem_init(&mutex,0,1);
+  
+  	/* Se pasa a atender todas las peticiones hasta que se finalice el proceso */
+  	while (!finished){
+		//4. Aceptar la conexion
+		//el sistema "llena" client_addr con la informacion del cliente
+		//y almacena en client_addr_len el tamaño obtenido de esa direccion
+		printf("Aceptando conexiones...\n");
+		/*Bloquearse esperando a que un cliente se conecte*/
+		client_sd = accept(sd, (struct sockaddr *)&client_addr, &client_addr_len);
+		down(&mutex);
+		int pos = agregar_cliente(client_sd);
+		up(&mutex);
+		pthread_t t_cliente;
+		pthread_create(&t_cliente, NULL, atender_cliente, &clients[pos]);
+		printf("Cliente conectado!\n");
+  	}
+}
+
+void down(semaphore * s){
+	sem_wait(s);
+}
+
+void up(semaphore * s){
+	sem_post(s);
+}
+
+int recibirArchivo(int client_sd,file_info infoF){	
+	struct stat s;
+	int faltantes;
+	char buf[BUFSIZ];
+	int a_leer;
+	int leido;
+	char out_filename[PATH_MAX];
+	int out_fd;
+	int escritos;
+	int leido2;
+
+	memset(&infoF,0,sizeof(file_info));
+	leido2 = read(client_sd, (char *)&infoF, sizeof(file_info));
+	//1. Recibir la informacion del archivo	
+	// Inmediatamente despues del infoF, leer el contenido del archivo
+	strcpy(out_filename, "files/");
+	strcat(out_filename, infoF.filename);
+	out_fd = open(out_filename, O_CREAT | O_WRONLY , infoF.mode); 
+	
+	faltantes = infoF.size;
+	
+	while(faltantes > 0) {
+		//suponer que todavia quedan suficientes bytes a leer
+		a_leer = BUFSIZ;
+		//Verificar si quedan menos bytes por leer en el archivo
+		if (faltantes < BUFSIZ) {
+		    a_leer = faltantes;		    
+		}
+		memset(buf,0,BUFSIZ);
+		printf("Bytes a leer %d\n",a_leer);
+		leido = read(client_sd, buf, a_leer);
+		printf("Bytes leidos %d\n",leido);
+		if(leido>0){
+			printf("Contenido del archivo: %s\n",buf);
+			escritos=write(out_fd, buf, leido);
+			if(escritos>0){
+			   faltantes = faltantes - leido;
+			}else{
+			   printf("Fallo escribir en el archivo");
+			}				
+		}else{
+			break;
+		}		
 	}
+	close(out_fd);	
+}
 
-	//2. Asociar el socket a la direccion addr de tipo IPv4  (bind)
-	if (bind(s, (struct sockaddr*)&addr, sizeof(struct sockaddr_in)) != 0) {
-		perror("bind");
-		exit(EXIT_FAILURE);
-		}
+int transferirArchivo(int client_sd,file_info infoF){
+  	char ruta[PATH_MAX];
+  	char* path;
+  	char* fn;
+  	char buf[BUFSIZ];
+  	struct stat s;
+  	int f;
+	int faltantes;
+	int a_leer;
+	int leidos, leido2;	
+	int escritos;
+	int size;
+		
+  	strcpy(ruta,"www/");
+	strcat(ruta, infoF.filename);
+	fn=infoF.filename;
+	
+	memset(&infoF,0,sizeof(file_info));
+	leido2 = read(client_sd, (char *)&infoF, sizeof(file_info));
 
-
-	//3 Poner el socket disponible para recibir conexiones
-	if (listen(s, 10) != 0) {
-		perror("listen");
-		exit(EXIT_FAILURE);
-		}
-	printf("Server started.\n");
-		printf("Cuanto vale BUFSIZ? %d\n", BUFSIZ);
-
-	//4. Esperar (BLOQUEARSE) por una conexion
-	c = accept(s, NULL, 0); //TODO opcional: recibir la direccion del cliente
-	if (c < 0) {
-		perror("accept");
-		exit(EXIT_FAILURE);
-		}
-
-	/* TODO crear un hilo que realice la siguiente tarea: */
-
-	while(!finished) {
-		//Leer de la conexion del cliente
-		nread = read(c, buf, BUFSIZ);
-		if (nread <=0) {
-			//End read loop
-			finished = 1;
-			continue;
-		}
-		//La solicitud tiene formato GET /ruta_archivo HTTP/1.1\n\n
-		// Buscar el archivo dentro del subdirectorio www/
-		//Si no existe, construir el mensaje de error (HTTP/1.1 404 Not Found) y enviar
-		//En Caso contrario:
-		//Encontrar el tamaño del archivo (stat)
-		//Construir el encabezado
-		//Enviar el encabezado seguido de \n\n
-		//Enviar el contenido del archivo
-		//Cerrar la conexion y terminar el hilo		
+	printf("Nombre del archivo a enviar al cliente: %s\n",fn);
+	
+	path=realpath(ruta,NULL);
+		     	
+	if (path == NULL) {
+	    printf("No existe el archivo o directorio solicitado por el cliente\n");
+	    //Enviando infoF con la información del archivo solicitado, al cliente.
+	    size=enviarInfoArchivo(client_sd,fn,s);  
+	    exit(EXIT_FAILURE);		     	    	  
 	}
+		
+	if (stat(path, &s) != 0) {
+	    perror("stat");
+	    exit(EXIT_FAILURE);	
+	}
+	if (!S_ISREG(s.st_mode)) {
+	   printf("%s El cliente ha solicitado un directorio,No un archivo!\n", path);		  
+	}
+	//Enviando infoF con la información del archivo solicitado, al cliente.	
+	size=enviarInfoArchivo(client_sd,fn,s);
+	printf("Enviando archivo al cliente...\n");
+	//abrir el archivo modo lectura
+	f=open(ruta,O_RDONLY);
+		 
+	faltantes = size;
+			 
+	while(faltantes > 0) {
+	        
+		a_leer = BUFSIZ;
+		//Verificar si quedan menos bytes por leer en el archivo
+		if (faltantes < BUFSIZ) {
+		    a_leer = faltantes;
+		}
+		memset(buf,0,BUFSIZ);
+		printf("Bytes a leer: %d\n",a_leer);
+		leidos = read(f, buf, a_leer);	
+		printf("Bytes leidos: %d\n",leidos);
+		if(leidos>0){
+		   escritos=write(client_sd, buf, leidos);
+		   if(escritos>0){
+		       faltantes = faltantes - leidos;	
+		   }else{
+			printf("Fallo enviar al servidor");
+		   }
+		}else{
+			printf("No se pudo leer el contenido del archivo.\n");
+			break;
+		}
+	}
+	printf("Transferencia completa...\n");
+	close(f); 		
+}
 
-	//5. Cerrar la conexion con el cliente
-	close(c);
-
-	//6. Cerrar el socket del servidor
-	close(s);
-	printf("Server finished.\n");
-
-	exit(EXIT_SUCCESS);
+int enviarInfoArchivo(int client_sd,char* fn,struct stat s){
+ 	file_info infoF;
+ 	int escritos;
+ 	//Limpia la estructura
+	memset(&infoF,0,sizeof(file_info));
+	//Asignando valores a la estructura
+	strcpy(infoF.filename,fn);
+	infoF.size = s.st_size;
+	infoF.mode = s.st_mode;		 
+	
+	//Envia infoF al cliente con la info del archivo
+	escritos = write(client_sd,&infoF,sizeof(file_info));
+	if(escritos <= 0){
+		return infoF.size;
+	    printf("Fallo enviar la informacion del archivo al cliente.");
+	}
+	return infoF.size;	
 }
 
 
-void signal_handler(int num) {
-	printf("Signal %d received\n", num);
-	finished = 1;
+void * atender_cliente(void * client_sd){
+	int cliente = *(int *)client_sd;
+    int leido,leido2;
+	file_info infoF;
+	request req;
+	int client_finished;
+	struct stat st;
+	
+	client_finished  = 0;  
+	//validar si este cliente termino (client_finished) y si todo el servidor se detuvo (finished)
+    while(!client_finished || !finished){   
+	    
+	    memset(&req,0,sizeof(request));
+	    //Leer el infoF para obtener la informacion del archivo del socket
+	    leido=read(cliente, &req, sizeof(request));
+		//printf("Obteniendo del cliente: %s %s\n", req.comando, req.filename);
+		strcpy(infoF.filename, req.filename);
+		strcpy(infoF.comando, req.comando);		
+		
+	    if(leido <= 0){
+			perror("read");
+	    	break;
+	    }
+
+		if(strcmp(req.comando,"exit") == 0){
+			printf("Conexion terminada\n");  
+			close(cliente);
+			client_finished=1;  
+	    }else if(strcmp(req.comando,"put") == 0){
+			recibirArchivo(cliente, infoF);
+	    }else if(strcmp(req.comando,"get") == 0){	
+			transferirArchivo(cliente, infoF);
+		}else{
+			printf("Comando no valido!\n");	
+	    }	    
+    }    
+}
+
+void handle_sigterm(int signal){
+    printf("Servidor finalizado\n");
+    finished = 1;
+    /*Cerrar todos los recursos abiertos*/
+    fclose(stdin);
+}
+
+int agregar_cliente(int c){
+	memset(clients,0,MAX_CLIENTES*sizeof(int));
+	for(int i=0; i<MAX_CLIENTES;i++){
+		if(clients[i]==0){
+			clients[i]=c;
+			return i;
+		}
+	}
 }
