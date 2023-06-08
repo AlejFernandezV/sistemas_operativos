@@ -253,13 +253,11 @@ int transferirArchivo(int client_sd,file_info infoF){
 	if (path == NULL) {
 	    printf("No existe el archivo o directorio solicitado por el cliente\n");
 	    //Enviando infoF con la información del archivo solicitado, al cliente.
-	    size=enviarInfoArchivo(client_sd,"error.html",0,s);  
-	    exit(EXIT_FAILURE);		     	    	  
+	    size=enviarInfoArchivo(client_sd,"error.html",0,s);     	    	  
 	}
 		
 	if (stat(path, &s) != 0) {
 	    perror("stat");
-	    exit(EXIT_FAILURE);	
 	}
 	if (!S_ISREG(s.st_mode)) {
 	   printf("%s El cliente ha solicitado un directorio,No un archivo!\n", path);		  
@@ -403,7 +401,7 @@ char* mensajeSalida(char * title, int size, char* extension){
   	struct tm *local_time = localtime(&now);
 
 	sprintf(message,
-			"HTTP/1.1 %s\r\n"
+			"\nHTTP/1.1 %s\r\n"
 			"X-Powered-By: OS HTTP Server\r\n"
 			"Content-Type: %s\r\n"
 			"Content-Length: %d\r\n"

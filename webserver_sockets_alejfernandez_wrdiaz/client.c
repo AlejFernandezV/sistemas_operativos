@@ -88,7 +88,8 @@ int main(int argc, char *argv[])
 	while (!finished)
 	{
 		// lee una linea de la entrada estandar
-		printf("Ingrese el comando: \n");
+		printf("\n____________________________________________________\n");
+		printf("Realice su solicitud \n");
 		printf(">");
 		memset(comand, 0, BUFSIZ); // Rellenar con ceros el bufer
 		fgets(comand, 80, stdin);  /*Leer comando por entrada estandar*/
@@ -112,7 +113,7 @@ int main(int argc, char *argv[])
 			close(sd);
 			finished = 1;
 		}
-		else if (( (strcmp(sp->parts[0], "get") == 0) || (strcmp(sp->parts[0], "GET") == 0) )&& sp->count == 2)
+		else if (((strcmp(sp->parts[0], "get") == 0) || (strcmp(sp->parts[0], "GET") == 0)) && sp->count == 2)
 		{
 			strcpy(req.comando, sp->parts[0]);
 			strcpy(req.filename, sp->parts[1]);
@@ -133,20 +134,21 @@ int main(int argc, char *argv[])
 	}
 }
 
-
 int recibirArchivo(int sd, char *fn, char *comand)
 {
 	file_info infoF;
 	int escritos;
 	int leido;
 	int out_fd;
-	int faltantes ;
+	int faltantes;
 	int a_leer;
 	int nread;
 	int escritos2;
 	char out_filename[PATH_MAX];
-	char * buffer;
+	char out_filename_error[PATH_MAX];
+	char *buffer;
 	char buf[BUFSIZ];
+	char buf_error[BUFSIZ];
 
 	// Limpia la estructura
 	memset(&infoF, 0, sizeof(file_info));
@@ -154,7 +156,7 @@ int recibirArchivo(int sd, char *fn, char *comand)
 	strcpy(infoF.filename, fn);
 	strcpy(infoF.comando, comand);
 
-	printf("Archivo a recibir del servidor: %s\n", infoF.filename);
+	printf("\nArchivo a recibir del servidor: %s\n", infoF.filename);
 
 	// Envia el protocolo al servidor
 	escritos = write(sd, &infoF, sizeof(file_info));
@@ -174,20 +176,31 @@ int recibirArchivo(int sd, char *fn, char *comand)
 		printf("El archivo no existe en el servidor...\n");
 	}
 	printf("Leyendo archivo enviado por el servidor...\n");
+	printf("%s", &infoF.mensaje);
 	if (strcmp(infoF.filename, "error.html") == 0)
 	{
+		// // Leer el contenido del archivo
+		strcpy(out_filename_error, "www/");
+		strcat(out_filename_error, "error.html");
+		FILE *file = fopen(out_filename_error, "r");
 		// Leer el contenido del archivo
-		strcpy(out_filename, "files/");
-		strcat(out_filename, infoF.filename);
+		while (fgets(buf_error, sizeof(buf_error), file) != NULL)
+		{
+			printf("%s", buf_error);
+		}
 	}
 	else
 	{
 		// Leer el contenido del archivo
 		strcpy(out_filename, "files/");
 		strcat(out_filename, infoF.filename);
+		FILE *file = fopen(out_filename, "r");
+		// Leer el contenido del archivo
+		while (fgets(buf, sizeof(buf), file) != NULL)
+		{
+			printf("%s", buf);
+		}
 	}
-	
-	printf("%s",&infoF.mensaje);
 
 	out_fd = open(out_filename, O_CREAT | O_WRONLY, infoF.mode);
 
