@@ -253,7 +253,7 @@ int transferirArchivo(int client_sd,file_info infoF){
 	if (path == NULL) {
 	    printf("No existe el archivo o directorio solicitado por el cliente\n");
 	    //Enviando infoF con la información del archivo solicitado, al cliente.
-	    size=enviarInfoArchivo(client_sd,fn,0,s);  
+	    size=enviarInfoArchivo(client_sd,"error.html",0,s);  
 	    exit(EXIT_FAILURE);		     	    	  
 	}
 		
@@ -313,14 +313,12 @@ int enviarInfoArchivo(int client_sd,char* fn,int band,struct stat s){
 	strcpy(infoF.filename,fn);
 	infoF.size = s.st_size;
 	infoF.mode = s.st_mode;
-
+	
 	extension = strchr(infoF.filename,46);
 
 	if(extension == NULL){
 		extension = "NO EXTENSION";
 	}
-
-	printf("Extension: %s\n", extension);
 
 	if(band==1){
 		mensaje = mensajeSalida("200 OK",infoF.size,extension);
