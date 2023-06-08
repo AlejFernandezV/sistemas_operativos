@@ -45,9 +45,10 @@ int transferirArchivo(int client_sd,file_info infoF);
  * @brief envia la informacion del archivo solicitado por el cliente
  * @param client_sd 
  * @param fn nombre del archivo
+ * @param mensaje de error o de ok
  * @param s objeto para acceder al estado del archivo
  */
-int enviarInfoArchivo(int client_sd,char* fn,struct stat s);
+int enviarInfoArchivo(int client_sd,char* fn,int band,struct stat s);
 
 /**
  * @brief proceso que se realiza cada vez que se conecta un nuevo cliente
@@ -67,6 +68,13 @@ void handle_sigterm(int signal);
  * @param c entero asociado al cliente que se encuentra conectado
  */
 int agregar_cliente(int c);
+
+/**
+ * @brief Arma el mensaje que llegará al cliente
+ * @param title Será el mensaje de error o de ok respectivamente
+ * @param fi estructura que guardará la informacion del archivo
+ */
+char* mensajeSalida(char * title, int size, char* extension);
 
 /**
  * @brief programa principal
@@ -186,7 +194,7 @@ int recibirArchivo(int client_sd,file_info infoF){
 	leido2 = read(client_sd, (char *)&infoF, sizeof(file_info));
 	//1. Recibir la informacion del archivo	
 	// Inmediatamente despues del infoF, leer el contenido del archivo
-	strcpy(out_filename, "files/");
+	strcpy(out_filename, "www/");
 	strcat(out_filename, infoF.filename);
 	out_fd = open(out_filename, O_CREAT | O_WRONLY , infoF.mode); 
 	
@@ -245,7 +253,7 @@ int transferirArchivo(int client_sd,file_info infoF){
 	if (path == NULL) {
 	    printf("No existe el archivo o directorio solicitado por el cliente\n");
 	    //Enviando infoF con la información del archivo solicitado, al cliente.
-	    size=enviarInfoArchivo(client_sd,fn,s);  
+	    size=enviarInfoArchivo(client_sd,fn,0,s);  
 	    exit(EXIT_FAILURE);		     	    	  
 	}
 		
@@ -256,8 +264,10 @@ int transferirArchivo(int client_sd,file_info infoF){
 	if (!S_ISREG(s.st_mode)) {
 	   printf("%s El cliente ha solicitado un directorio,No un archivo!\n", path);		  
 	}
+
 	//Enviando infoF con la información del archivo solicitado, al cliente.	
-	size=enviarInfoArchivo(client_sd,fn,s);
+	size=enviarInfoArchivo(client_sd,fn,1,s);
+
 	printf("Enviando archivo al cliente...\n");
 	//abrir el archivo modo lectura
 	f=open(ruta,O_RDONLY);
@@ -291,15 +301,36 @@ int transferirArchivo(int client_sd,file_info infoF){
 	close(f); 		
 }
 
-int enviarInfoArchivo(int client_sd,char* fn,struct stat s){
+int enviarInfoArchivo(int client_sd,char* fn,int band,struct stat s){
  	file_info infoF;
+	char* mensaje;
+	char* extension;
  	int escritos;
+
  	//Limpia la estructura
 	memset(&infoF,0,sizeof(file_info));
 	//Asignando valores a la estructura
 	strcpy(infoF.filename,fn);
 	infoF.size = s.st_size;
-	infoF.mode = s.st_mode;		 
+	infoF.mode = s.st_mode;
+
+	extension = strchr(infoF.filename,46);
+
+	if(extension == NULL){
+		extension = "NO EXTENSION";
+	}
+
+	printf("Extension: %s\n", extension);
+
+	if(band==1){
+		mensaje = mensajeSalida("200 OK",infoF.size,extension);
+	}
+	else{
+		mensaje = mensajeSalida("404 NOT FOUND",infoF.size,extension);
+	}
+
+	strcpy(infoF.mensaje,mensaje);
+	//printf("Mensaje \n%s", infoF.mensaje);
 	
 	//Envia infoF al cliente con la info del archivo
 	escritos = write(client_sd,&infoF,sizeof(file_info));
@@ -310,14 +341,12 @@ int enviarInfoArchivo(int client_sd,char* fn,struct stat s){
 	return infoF.size;	
 }
 
-
 void * atender_cliente(void * client_sd){
 	int cliente = *(int *)client_sd;
     int leido,leido2;
 	file_info infoF;
 	request req;
 	int client_finished;
-	struct stat st;
 	
 	client_finished  = 0;  
 	//validar si este cliente termino (client_finished) y si todo el servidor se detuvo (finished)
@@ -335,13 +364,11 @@ void * atender_cliente(void * client_sd){
 	    	break;
 	    }
 
-		if(strcmp(req.comando,"exit") == 0){
+		if((strcmp(req.comando,"exit") == 0) || (strcmp(req.comando,"EXIT") == 0)){
 			printf("Conexion terminada\n");  
 			close(cliente);
 			client_finished=1;  
-	    }else if(strcmp(req.comando,"put") == 0){
-			recibirArchivo(cliente, infoF);
-	    }else if(strcmp(req.comando,"get") == 0){	
+	    }else if((strcmp(req.comando,"get") == 0) || (strcmp(req.comando,"GET") == 0)){	
 			transferirArchivo(cliente, infoF);
 		}else{
 			printf("Comando no valido!\n");	
@@ -364,4 +391,27 @@ int agregar_cliente(int c){
 			return i;
 		}
 	}
+}
+
+char* mensajeSalida(char * title, int size, char* extension){
+	int * psize = &size;
+	
+	// Create the message header.
+	char * message = malloc(1024);
+	// Get the current time.
+  	time_t now = time(NULL);
+
+  	//convertir el tiempo actual a la estructura tm.
+  	struct tm *local_time = localtime(&now);
+
+	sprintf(message,
+			"HTTP/1.1 %s\r\n"
+			"X-Powered-By: OS HTTP Server\r\n"
+			"Content-Type: %s\r\n"
+			"Content-Length: %d\r\n"
+			"Date: %d-%02d-%02d\r\n\r\n",
+			title, extension , psize, local_time->tm_year + 1900, local_time->tm_mon + 1, local_time->tm_mday);
+
+	// Return the message.
+	return message;
 }

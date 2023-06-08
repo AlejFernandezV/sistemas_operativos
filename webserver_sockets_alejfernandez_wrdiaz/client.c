@@ -258,6 +258,7 @@ int recibirArchivo(int sd, char *fn, char *comand)
 	int nread;
 	int escritos2;
 	char out_filename[PATH_MAX];
+	char * buffer;
 	char buf[BUFSIZ];
 
 	// Limpia la estructura
@@ -286,15 +287,15 @@ int recibirArchivo(int sd, char *fn, char *comand)
 		printf("No se recibio ningún archivo->El archivo no existe en el servidor...\n");
 		exit(EXIT_FAILURE);
 	}
-	printf("Leyendo archivo enviado por el cliente......\n");
+	printf("Leyendo archivo enviado por el servidor......\n");
 	// Leer el contenido del archivo
-	strcpy(out_filename, "filesC/");
+	strcpy(out_filename, "files/");
 	strcat(out_filename, infoF.filename);
 
-	out_fd = open(out_filename, O_CREAT | O_WRONLY, infoF.mode);
+	//sprintf(buffer,&infoF.mensaje);
+	//printf("%s",&infoF.mensaje);
 
-	faltantes = infoF.size;
-	printf("Tamaño del archivo recibido: %d bytes.\n", faltantes);
+	out_fd = open(out_filename, O_CREAT | O_WRONLY, infoF.mode);
 
 	while (faltantes > 0)
 	{
@@ -312,7 +313,7 @@ int recibirArchivo(int sd, char *fn, char *comand)
 		printf("Bytes leidos: %d\n", nread);
 		if (nread > 0)
 		{
-			printf("Contenido del archivo: %s", buf);
+			printf("=== Contenido del archivo ====\n %s", buf);
 			// Envia el contenido del buffer al archivo creado
 			escritos2 = write(out_fd, buf, nread);
 			if (escritos2 > 0)
