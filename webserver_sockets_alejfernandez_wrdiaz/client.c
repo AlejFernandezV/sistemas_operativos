@@ -13,16 +13,25 @@
 #include "protocol.h"
 #include "split.h"
 
-int finished;
+/**
+ * @brief Envia encabezado del archivo
+ *
+ * @param client_sd socket
+ * @param fn nombre del archivo
+ * @param s objeto para acceder al estado del archivo
+ */
 int enviarInfoArchivo(int client_sd, char *fn, struct stat s);
-int transferirArchivo(int sd, char *fn, struct stat s, char *comand, char ruta[PATH_MAX]);
-int recibirArchivo(int sd, char *fn, char *comand);
 
 /**
- * @brief programa principal
- * @param argc cantidad de argumentos que se ingresan por linea de comandos
- * @param argv argumentos
+ * @brief Recibe el archivo desde el servidor
+ * @param sd socket
+ * @param fn nombre del archivo
+ * @param comand comando digitado para realizar determinada accion
  */
+int recibirArchivo(int sd, char *fn, char *comand);
+
+int finished;
+
 int main(int argc, char *argv[])
 {
 	// Socket
@@ -91,70 +100,26 @@ int main(int argc, char *argv[])
 		{
 			continue;
 		}
-		if (strcmp(sp->parts[0], "exit") != 0 && strcmp(sp->parts[0], "put") != 0 && strcmp(sp->parts[0], "get") != 0)
+		if (strcmp(sp->parts[0], "exit") != 0 && strcmp(sp->parts[0], "get") != 0)
 		{
 			continue;
 		}
 		// struct stat s;
-		if (strcmp(sp->parts[0], "exit") == 0)
+		if ((strcmp(sp->parts[0], "exit") == 0) || (strcmp(sp->parts[0], "EXIT") == 0))
 		{
 			strcpy(req.comando, sp->parts[0]);
 			write(sd, &req, sizeof(request));
 			close(sd);
 			finished = 1;
 		}
-		else if (strcmp(sp->parts[0], "put") == 0 && sp->count == 2)
+		else if (( (strcmp(sp->parts[0], "get") == 0) || (strcmp(sp->parts[0], "GET") == 0) )&& sp->count == 2)
 		{
 			strcpy(req.comando, sp->parts[0]);
 			strcpy(req.filename, sp->parts[1]);
+
 			strcpy(ruta, "www/");
 			strcat(ruta, req.filename);
 			path = realpath(ruta, NULL);
-			if (path == NULL)
-			{
-				printf("NO existe el archivo o directorio\n");
-				continue;
-			}
-			// POST: path contiene una ruta valida
-			if (stat(path, &s) != 0)
-			{
-				perror("stat");
-				continue;
-			}
-			if (!S_ISREG(s.st_mode))
-			{
-				printf("%s No es un archivo regular!\n", path);
-				continue;
-			}
-
-			// enviar la solicitud
-			write(sd, &req, sizeof(request));
-			transferirArchivo(sd, req.filename, s, req.comando, ruta);
-		}
-		else if (strcmp(sp->parts[0], "get") == 0 && sp->count == 2)
-		{
-			strcpy(req.comando, sp->parts[0]);
-			strcpy(req.filename, sp->parts[1]);
-
-			strcpy(ruta, "files/");
-			strcat(ruta, req.filename);
-			path = realpath(ruta, NULL);
-			if (path == NULL)
-			{
-				printf("NO existe el archivo o directorio\n");
-				continue;
-			}
-			// POST: path contiene una ruta valida
-			if (stat(path, &s) != 0)
-			{
-				perror("stat");
-				continue;
-			}
-			if (!S_ISREG(s.st_mode))
-			{
-				printf("%s No es un archivo regular!\n", path);
-				continue;
-			}
 
 			// enviar la solicitud
 			write(sd, &req, sizeof(request));
@@ -167,93 +132,15 @@ int main(int argc, char *argv[])
 		}
 	}
 }
-/**
- * @brief envia un archivo al servidors
- * @param sd socket
- * @param fn nombre del archivo
- * @param s objeto para acceder al estado del archivo
- * @param comand comando digitado para realizar determinada accion
- * @param ruta directorio donde se encuentra el archivo
- */
-int transferirArchivo(int sd, char *fn, struct stat s, char *comand, char ruta[PATH_MAX])
-{
-	file_info infoF;
-	char buf[BUFSIZ];
 
-	int f;
-	int faltantes;
-	int a_leer;
-	int nread;
-	int escritos;
 
-	// Limpia la estructura
-	memset(&infoF, 0, sizeof(file_info));
-
-	// Asigna valores a la estructura
-	strcpy(infoF.filename, fn);
-	infoF.size = s.st_size;
-	infoF.mode = s.st_mode;
-	strcpy(infoF.comando, comand);
-
-	printf("Archivo a enviar: %s    Tamaño: %d\n", infoF.filename, infoF.size);
-	escritos = write(sd, &infoF, sizeof(infoF));
-	if (escritos <= 0)
-	{
-		printf("Fallo enviar el protocolo del archivo");
-	}
-
-	// abrir el archivo modo lectura
-	f = open(ruta, O_RDONLY);
-
-	faltantes = infoF.size;
-
-	while (faltantes > 0)
-	{
-		// suponer que todavia quedan suficientes bytes a leer
-		a_leer = BUFSIZ;
-		// Verificar si quedan menos bytes por leer en el archivo
-		if (faltantes < BUFSIZ)
-		{
-			a_leer = faltantes;
-		}
-		memset(buf, 0, BUFSIZ);
-		printf("Bytes a leer %d\n", a_leer);
-		nread = read(f, buf, a_leer);
-		printf("Bytes leidos: %d\n", nread);
-		if (nread > 0)
-		{
-			escritos = write(sd, buf, nread);
-			if (escritos > 0)
-			{
-				faltantes -= nread;
-			}
-			else
-			{
-				printf("Fallo enviar archivo al servidor");
-			}
-		}
-		else
-		{
-			printf("No se pudo leer el archivo.\n");
-			break;
-		}
-	}
-	printf("Transferencia completa...\n");
-	close(f);
-}
-/**
- * @brief Recibe el archivo desde el servidor
- * @param sd socket
- * @param fn nombre del archivo
- * @param comand comando digitado para realizar determinada accion
- */
 int recibirArchivo(int sd, char *fn, char *comand)
 {
 	file_info infoF;
 	int escritos;
 	int leido;
 	int out_fd;
-	int faltantes;
+	int faltantes ;
 	int a_leer;
 	int nread;
 	int escritos2;
@@ -284,18 +171,27 @@ int recibirArchivo(int sd, char *fn, char *comand)
 	// Verifico que el tamaño del archivo enviado por el servidor sea mayor a cero.
 	if (infoF.size <= 0)
 	{
-		printf("No se recibio ningún archivo->El archivo no existe en el servidor...\n");
-		exit(EXIT_FAILURE);
+		printf("El archivo no existe en el servidor...\n");
 	}
-	printf("Leyendo archivo enviado por el servidor......\n");
-	// Leer el contenido del archivo
-	strcpy(out_filename, "files/");
-	strcat(out_filename, infoF.filename);
-
-	//sprintf(buffer,&infoF.mensaje);
-	//printf("%s",&infoF.mensaje);
+	printf("Leyendo archivo enviado por el servidor...\n");
+	if (strcmp(infoF.filename, "error.html") == 0)
+	{
+		// Leer el contenido del archivo
+		strcpy(out_filename, "files/");
+		strcat(out_filename, infoF.filename);
+	}
+	else
+	{
+		// Leer el contenido del archivo
+		strcpy(out_filename, "files/");
+		strcat(out_filename, infoF.filename);
+	}
+	
+	printf("%s",&infoF.mensaje);
 
 	out_fd = open(out_filename, O_CREAT | O_WRONLY, infoF.mode);
+
+	faltantes = infoF.size;
 
 	while (faltantes > 0)
 	{
@@ -307,13 +203,11 @@ int recibirArchivo(int sd, char *fn, char *comand)
 			a_leer = faltantes;
 		}
 		memset(buf, 0, BUFSIZ);
-		printf("Bytes a leer: %d\n", a_leer);
 		// Lee del socket el contenido del archivo enviado por el servidor y lo manda al buffer
 		nread = read(sd, buf, a_leer);
-		printf("Bytes leidos: %d\n", nread);
 		if (nread > 0)
 		{
-			printf("=== Contenido del archivo ====\n %s", buf);
+			printf("%s", buf);
 			// Envia el contenido del buffer al archivo creado
 			escritos2 = write(out_fd, buf, nread);
 			if (escritos2 > 0)
@@ -332,13 +226,7 @@ int recibirArchivo(int sd, char *fn, char *comand)
 	}
 	close(out_fd);
 }
-/**
- * @brief Envia encabezado del archivo
- *
- * @param client_sd socket
- * @param fn nombre del archivo
- * @param s objeto para acceder al estado del archivo
- */
+
 int enviarInfoArchivo(int client_sd, char *fn, struct stat s)
 {
 	file_info infoF;
