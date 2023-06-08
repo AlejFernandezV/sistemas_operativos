@@ -48,7 +48,7 @@ int transferirArchivo(int client_sd,file_info infoF);
  * @param mensaje de error o de ok
  * @param s objeto para acceder al estado del archivo
  */
-int enviarInfoArchivo(int client_sd,char* fn,char* mensaje,struct stat s);
+int enviarInfoArchivo(int client_sd,char* fn,int band,struct stat s);
 
 /**
  * @brief proceso que se realiza cada vez que se conecta un nuevo cliente
@@ -74,7 +74,7 @@ int agregar_cliente(int c);
  * @param title Será el mensaje de error o de ok respectivamente
  * @param fi estructura que guardará la informacion del archivo
  */
-char * mensajeSalida(char * title, file_info fi);
+char* mensajeSalida(char * title, int size, char* extension);
 
 /**
  * @brief programa principal
@@ -230,7 +230,6 @@ int transferirArchivo(int client_sd,file_info infoF){
   	char ruta[PATH_MAX];
   	char* path;
   	char* fn;
-	char* mensaje = "Hola";
   	char buf[BUFSIZ];
   	struct stat s;
   	int f;
@@ -254,7 +253,7 @@ int transferirArchivo(int client_sd,file_info infoF){
 	if (path == NULL) {
 	    printf("No existe el archivo o directorio solicitado por el cliente\n");
 	    //Enviando infoF con la información del archivo solicitado, al cliente.
-	    size=enviarInfoArchivo(client_sd,fn,"404 Not Found",s);  
+	    size=enviarInfoArchivo(client_sd,fn,0,s);  
 	    exit(EXIT_FAILURE);		     	    	  
 	}
 		
@@ -267,8 +266,7 @@ int transferirArchivo(int client_sd,file_info infoF){
 	}
 
 	//Enviando infoF con la información del archivo solicitado, al cliente.	
-	size=enviarInfoArchivo(client_sd,fn,"200 OK",s);
-
+	size=enviarInfoArchivo(client_sd,fn,1,s);
 
 	printf("Enviando archivo al cliente...\n");
 	//abrir el archivo modo lectura
@@ -303,23 +301,36 @@ int transferirArchivo(int client_sd,file_info infoF){
 	close(f); 		
 }
 
-int enviarInfoArchivo(int client_sd,char* fn,char* msj,struct stat s){
+int enviarInfoArchivo(int client_sd,char* fn,int band,struct stat s){
  	file_info infoF;
 	char* mensaje;
+	char* extension;
  	int escritos;
+
  	//Limpia la estructura
 	memset(&infoF,0,sizeof(file_info));
 	//Asignando valores a la estructura
-
 	strcpy(infoF.filename,fn);
 	infoF.size = s.st_size;
 	infoF.mode = s.st_mode;
-	mensaje = mensajeSalida(msj,infoF);
-	//TO DO! ERROR DE COMPATIBILIDAD
-	infoF.mensaje = mensaje;
 
-	printf("%s",infoF.mensaje);
-			 
+	extension = strchr(infoF.filename,46);
+
+	if(extension == NULL){
+		extension = "NO EXTENSION";
+	}
+
+	printf("Extension: %s\n", extension);
+
+	if(band==1){
+		mensaje = mensajeSalida("200 OK",infoF.size,extension);
+	}
+	else{
+		mensaje = mensajeSalida("404 NOT FOUND",infoF.size,extension);
+	}
+
+	strcpy(infoF.mensaje,mensaje);
+	//printf("Mensaje \n%s", infoF.mensaje);
 	
 	//Envia infoF al cliente con la info del archivo
 	escritos = write(client_sd,&infoF,sizeof(file_info));
@@ -336,7 +347,6 @@ void * atender_cliente(void * client_sd){
 	file_info infoF;
 	request req;
 	int client_finished;
-	struct stat st;
 	
 	client_finished  = 0;  
 	//validar si este cliente termino (client_finished) y si todo el servidor se detuvo (finished)
@@ -383,9 +393,11 @@ int agregar_cliente(int c){
 	}
 }
 
-char * mensajeSalida(char * title, file_info fi){
+char* mensajeSalida(char * title, int size, char* extension){
+	int * psize = &size;
+	
 	// Create the message header.
-	char *message = malloc(1024);
+	char * message = malloc(1024);
 	// Get the current time.
   	time_t now = time(NULL);
 
@@ -398,7 +410,7 @@ char * mensajeSalida(char * title, file_info fi){
 			"Content-Type: %s\r\n"
 			"Content-Length: %d\r\n"
 			"Date: %d-%02d-%02d\r\n\r\n",
-			title, fi.mode, fi.size, local_time->tm_year + 1900, local_time->tm_mon + 1, local_time->tm_mday);
+			title, extension , psize, local_time->tm_year + 1900, local_time->tm_mon + 1, local_time->tm_mday);
 
 	// Return the message.
 	return message;
