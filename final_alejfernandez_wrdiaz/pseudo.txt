@@ -1,0 +1,9 @@
+leer el nombre del archivo por linea de comandos
+verificar si el archivo existe y tiene exactamente 512 bufferverificar la firma: los ultimos 2 bytes 55 AA
+desde el byte 446
+
+char buf[512]
+
+read(fd, buf, 512)
+
+bootsector * bs = (bootsector*)bus;
