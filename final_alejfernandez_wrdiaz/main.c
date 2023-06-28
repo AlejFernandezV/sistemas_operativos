@@ -29,7 +29,6 @@ struct info_particion {
 
 /**
  * @brief Almacena la información de las particiones en una estructura.
- *
  * @param vec_info_particiones Vector de estructuras "info_particion" donde se almacenará la información.
  * @param vec_particiones Vector de estructuras "particion" que contiene los datos de las particiones.
  */
@@ -37,7 +36,6 @@ void almacenar_info_particiones(struct info_particion *vec_info_particiones, str
 
 /**
  * @brief Calcula el valor LBA (Logical Block Address) a partir de los valores de cilindro y sector.
- *
  * @param c Valor del cilindro.
  * @param s Valor del sector.
  * @return Valor LBA calculado.
