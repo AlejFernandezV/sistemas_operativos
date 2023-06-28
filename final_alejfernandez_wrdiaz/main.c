@@ -4,10 +4,16 @@
 
 #define MBR_SECTOR_SIZE 512
 
+/**
+ * @brief Estructura que representa una partición.
+ */
 struct particion {
-  char particion[16];
+  char particion[16]; 
 };
 
+/**
+ * @brief Estructura que contiene información de una partición.
+ */
 struct info_particion {
   unsigned char indicador_arranque;
   int sec_inicial_head;
@@ -21,17 +27,45 @@ struct info_particion {
   unsigned int tamanio;
 };
 
+/**
+ * @brief Almacena la información de las particiones en una estructura.
+ *
+ * @param vec_info_particiones Vector de estructuras "info_particion" donde se almacenará la información.
+ * @param vec_particiones Vector de estructuras "particion" que contiene los datos de las particiones.
+ */
 void almacenar_info_particiones(struct info_particion *vec_info_particiones, struct particion *vec_particiones);
 
+/**
+ * @brief Calcula el valor LBA (Logical Block Address) a partir de los valores de cilindro y sector.
+ *
+ * @param c Valor del cilindro.
+ * @param s Valor del sector.
+ * @return Valor LBA calculado.
+ */
 int calcular_lba(unsigned char c, unsigned char s);
 
+/**
+ * @brief Imprime la información de las particiones en una tabla.
+ * @param table Puntero a la tabla de información de particiones.
+ */
 void imprimir_info_particiones(struct info_particion *table);
 
+/**
+ * @brief Obtiene el nombre del sistema de archivos según el tipo de partición.
+ * @param partition_type Tipo de partición.
+ * @return El nombre del sistema de archivos.
+ */
 const char *get_filesystem_name(unsigned char partition_type);
 
+/**
+ * @brief Concatena cuatro números hexadecimales en un solo valor entero sin signo.
+ * @param a Primer número hexadecimal.
+ * @param b Segundo número hexadecimal.
+ * @param c Tercer número hexadecimal.
+ * @param d Cuarto número hexadecimal.
+ * @return Valor entero sin signo resultante de la concatenación.
+ */
 unsigned int concatenarNumerosHex(unsigned char a, unsigned char b, unsigned char c, unsigned char d);
-
-void mostrar_info_particion(char particion[]);
 
 int main(int argc, char *argv[]) {
 

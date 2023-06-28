@@ -8,4 +8,4 @@ doc:
 	doxygen
 
 clean:
-	rm -rf *.o hdisk.exe docs/
+	rm -rf *.o hdisk.exe hdisk docs/
